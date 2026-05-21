@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leitor QR e Frequência</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <!-- Biblioteca NoSleep.js para manter a tela ligada -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nosleep/0.12.0/NoSleep.min.js"></script>
+</head>
+<body class="m-0 overflow-hidden bg-black font-sans">
+    
+    <div id="setupModal" class="fixed inset-0 bg-gray-900 z-50 flex flex-col items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full flex flex-col gap-4 text-center">
+            <h2 class="text-3xl font-bold text-gray-800 mb-2">Setup da Gincana</h2>
+            
+            <div class="text-left text-gray-700">
+                <label class="font-bold text-sm">Tempo disponível (minutos):</label>
+                <input type="number" id="tempoInput" value="60" placeholder="Ex: 120" class="mt-1 p-3 border-2 border-gray-200 rounded-lg text-lg w-full outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition">
+            </div>
+
+            <label class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg cursor-pointer transition mt-2 flex flex-col items-center justify-center border-2 border-transparent hover:border-blue-300">
+                <span class="text-lg">📁 Selecionar Pasta Offline</span>
+                <span class="text-xs font-normal opacity-80 mt-1">Carregar fotos dos alunos</span>
+                <input type="file" id="pastaFotos" webkitdirectory directory multiple class="hidden">
+            </label>
+            <p id="statusPasta" class="text-sm font-medium text-gray-500">0 arquivos carregados</p>
+            
+            <button id="btnIniciar" disabled class="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-4 px-4 rounded-lg transition mt-4 text-lg shadow-lg">
+                ▶ Iniciar Gravação e Frequência
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal de Alerta Customizado (Substituindo o alert nativo) -->
+    <div id="customAlert" class="hidden fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full text-center">
+            <h3 class="text-2xl font-bold text-red-600 mb-4">Atenção</h3>
+            <p id="customAlertMsg" class="text-gray-700 mb-6 font-medium text-lg"></p>
+            <button onclick="document.getElementById('customAlert').classList.add('hidden')" class="bg-gray-800 hover:bg-gray-900 text-white px-8 py-3 rounded-lg font-bold transition">Entendi</button>
+        </div>
+    </div>
+
+    <video id="video" autoplay playsinline class="fixed inset-0 w-full h-full object-cover z-0"></video>
+    <canvas id="canvas" hidden></canvas>
+
+    <div id="topBar" class="hidden fixed top-0 right-0 p-6 z-30 pointer-events-none">
+        <button id="btnParar" class="pointer-events-auto bg-red-600 hover:bg-red-700 text-white text-sm font-bold py-3 px-6 rounded-full animate-pulse shadow-[0_0_15px_rgba(220,38,38,0.8)] transition flex items-center gap-2">
+            <div class="w-3 h-3 bg-white rounded-full"></div>
+        </button>
+    </div>
+
+    <div id="listaLateral" class="hidden fixed left-0 top-0 bottom-0 w-72 p-4 pt-6 z-20 overflow-y-auto bg-gradient-to-r from-black/80 via-black/50 to-transparent flex-col gap-3">
+        <h3 class="text-white font-bold text-xl mb-2 drop-shadow-md border-b border-gray-600 pb-2 inline-block w-max">Frequência Registrada</h3>
+        <div id="listaCards" class="flex flex-col gap-1.5 w-full"></div>
+    </div>
+
+    <div id="alunoCard" class="hidden fixed inset-0 z-10 flex-col items-center justify-center bg-black/75 backdrop-blur-md transition-opacity">
+        <img id="alunoFoto" class="hidden w-64 h-64 object-cover rounded-full mb-6 border-4 border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.5)]">
+        <p id="alunoInfo" class="text-center px-8 drop-shadow-2xl"></p>
+        <p id="alunoDataHora" class="text-xl font-bold text-white mt-4 drop-shadow-md bg-black/50 px-6 py-2 rounded-full border border-gray-600"></p>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        const setupModal = document.getElementById('setupModal');
+        const tempoInput = document.getElementById('tempoInput');
+        const pastaFotos = document.getElementById('pastaFotos');
+        const statusPasta = document.getElementById('statusPasta');
+        const btnIniciar = document.getElementById('btnIniciar');
+        const topBar = document.getElementById('topBar');
+        const btnParar = document.getElementById('btnParar');
+        const listaLateral = document.getElementById('listaLateral');
+        const listaCards = document.getElementById('listaCards');
+        const alunoCard = document.getElementById('alunoCard');
+        const alunoFoto = document.getElementById('alunoFoto');
+        const alunoInfo = document.getElementById('alunoInfo');
+        const alunoDataHora = document.getElementById('alunoDataHora');
+        const customAlert = document.getElementById('customAlert');
+        const customAlertMsg = document.getElementById('customAlertMsg');
+
+        const paletaCursos = ["text-blue-400", "text-purple-400", "text-pink-400", "text-yellow-400", "text-teal-400", "text-orange-400"];
+        let mapaCursos = {};
+        
+        let arquivosAlunos = [];
+        let alunosRegistrados = new Set();
+        let mediaRecorder;
+        let timeoutId;
+        let timerFim;
+        let ultimoCodigoLido = "";
+        let isAtivo = false;
+        
+        let mimeTypeSelecionado = "video/webm";
+        let extensaoVideo = "webm";
+
+        // Inicializa o NoSleep
+        const noSleep = new NoSleep();
+
+        pastaFotos.addEventListener('change', (e) => {
+            arquivosAlunos = Array.from(e.target.files);
+            statusPasta.innerText = `${arquivosAlunos.length} arquivos carregados e prontos.`;
+            statusPasta.className = "text-sm font-bold text-green-600";
+            btnIniciar.disabled = false;
+        });
+
+        function mostrarAlerta(mensagem) {
+            customAlertMsg.innerText = mensagem;
+            customAlert.classList.remove('hidden');
+        }
+
+        btnIniciar.onclick = async () => {
+            const minutos = parseInt(tempoInput.value) || 60; 
+            
+            // Ativa o NoSleep após a interação do usuário (clique no botão)
+            noSleep.enable();
+            
+            try {
+                // Tenta capturar a tela (Pode falhar em dispositivos Android muito antigos como 4.4)
+                const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+                
+                const tiposSuportados = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'];
+                for (let tipo of tiposSuportados) {
+                    if (MediaRecorder.isTypeSupported(tipo)) {
+                        mimeTypeSelecionado = tipo;
+                        extensaoVideo = tipo.includes('mp4') ? 'mp4' : 'webm';
+                        break;
+                    }
+                }
+
+                mediaRecorder = new MediaRecorder(screenStream, { mimeType: mimeTypeSelecionado });
+                mediaRecorder.ondataavailable = salvarPedaco;
+                
+                mediaRecorder.start(180000); 
+                
+                setupModal.classList.add('hidden');
+                topBar.classList.remove('hidden');
+                listaLateral.classList.remove('hidden');
+                listaLateral.classList.add('flex');
+
+                isAtivo = true;
+
+                // Inicia a câmera traseira
+                const camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                video.srcObject = camStream;
+                requestAnimationFrame(tick);
+
+                timerFim = setTimeout(encerrarGravacao, minutos * 60000);
+
+            } catch (err) {
+                mostrarAlerta("Atenção: É obrigatório permitir a gravação da tela para iniciar a gincana ou seu dispositivo não suporta esta função.");
+                console.error("Erro na gravação de tela:", err);
+                // Se falhar e precisar rodar num Android 4.4 sem gravar tela, comente o try-catch 
+                // e mantenha apenas a captura de getUserMedia(câmera) e o setup da UI.
+            }
+        };
+
+        function tick() {
+            if (!isAtivo) return;
+
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.height = video.videoHeight;
+                canvas.width = video.videoWidth;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+                if (code) {
+                    clearTimeout(timeoutId);
+
+                    if (code.data !== ultimoCodigoLido) {
+                        ultimoCodigoLido = code.data;
+                        let qrTexto = code.data;
+                        
+                        let searchCode = qrTexto.replace(/\//g, '');
+                        const aluno = arquivosAlunos.find(f => f.name.includes(searchCode));
+                        
+                        const dataAtual = new Date().toLocaleString('pt-BR');
+
+                        if (aluno) {
+                            if (alunoFoto.src) URL.revokeObjectURL(alunoFoto.src);
+                            alunoFoto.src = URL.createObjectURL(aluno);
+                            alunoFoto.classList.remove('hidden');
+                            alunoDataHora.innerText = dataAtual;
+                            alunoDataHora.classList.remove('hidden');
+                            
+                            let nomeArquivoSemExt = aluno.name.replace(/\.[^/.]+$/, "");
+                            let partes = nomeArquivoSemExt.split(" - ");
+                            let primeiroNome = "Aluno", ultimoNome = "", curso = "Desconhecido", matricula = "N/A", nomeCompleto = "";
+                            
+                            if (partes.length >= 4) {
+                                nomeCompleto = partes[0].trim();
+                                let nomes = nomeCompleto.split(' ');
+                                primeiroNome = nomes[0];
+                                ultimoNome = nomes.length > 1 ? nomes[nomes.length - 1] : "";
+                                matricula = partes[1].trim();
+                                curso = partes[2].trim();
+                            } else {
+                                nomeCompleto = nomeArquivoSemExt.replace(searchCode, '').replace(/-/g, ' ').trim();
+                                let nomes = nomeCompleto.split(' ');
+                                primeiroNome = nomes[0] || "Aluno";
+                                ultimoNome = nomes.length > 1 ? nomes[nomes.length - 1] : "";
+                            }
+                            
+                            let nomeCurto = `${primeiroNome} ${ultimoNome}`.trim();
+                            
+                            if (!mapaCursos[curso]) {
+                                mapaCursos[curso] = paletaCursos[Object.keys(mapaCursos).length % paletaCursos.length];
+                            }
+                            let corCurso = mapaCursos[curso];
+
+                            if (alunosRegistrados.has(searchCode)) {
+                                alunoInfo.innerText = "⚠️ ALUNO JÁ IDENTIFICADO ⚠️\n" + nomeCurto;
+                                alunoInfo.className = "text-4xl md:text-5xl font-black text-yellow-400 text-center max-w-4xl drop-shadow-[0_4px_4px_rgba(0,0,0,1)]";
+                                alunoFoto.className = "w-64 h-64 object-cover rounded-full mb-6 border-8 border-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.6)]";
+                            } else {
+                                // NOVO REGISTRO
+                                alunosRegistrados.add(searchCode);
+                                
+                                // === ENVIO PARA O GAS AQUI ===
+                                const GAS_URL = "https://script.google.com/macros/s/AKfycbyjBae75VDf7-wRWVLSiGN14Wd-yHjXs5RTraJ45DOz04xpBO3NDsVp2ijW-ueArbQ4QA/exec"; 
+                                
+                                if(GAS_URL !== "SUA_URL_DO_WEB_APP_AQUI") {
+                                    const params = new URLSearchParams({ nome: nomeCompleto, curso: curso, matricula: matricula, qrCode: searchCode });
+                                    fetch(`${GAS_URL}?${params.toString()}`, { mode: 'no-cors' }); 
+                                }
+
+                                alunoInfo.innerText = nomeCurto;
+                                alunoInfo.className = `text-5xl md:text-6xl font-bold ${corCurso} text-center max-w-4xl drop-shadow-2xl`;
+                                alunoFoto.className = "w-64 h-64 object-cover rounded-full mb-6 border-8 border-green-500 shadow-[0_0_40px_rgba(34,197,94,0.6)]";
+                                
+                                const cardLateral = `
+                                    <div class="bg-black/10 px-2 rounded-lg border-l-4 border-green-500 backdrop-blur-sm shadow-sm">
+                                        <span class="${corCurso} font-bold truncate leading-tight text-base">${nomeCurto}</span>
+                                        <span class="text-[10px] text-gray-300 truncate">${curso}</span>
+                                    </div>
+                                `;
+                                listaCards.insertAdjacentHTML('afterbegin', cardLateral);
+                            }
+                        } else {
+                            alunoFoto.classList.add('hidden');
+                            alunoDataHora.classList.add('hidden');
+                            alunoInfo.innerText = "❌ ALUNO NÃO CADASTRADO\nProcure a coordenação ou responsável.";
+                            alunoInfo.className = "text-3xl md:text-4xl font-bold text-red-500 text-center max-w-3xl drop-shadow-lg bg-black/80 p-8 rounded-3xl border-2 border-red-900";
+                        }
+                        
+                        alunoCard.classList.remove('hidden');
+                        alunoCard.classList.add('flex');
+                    }
+
+                    timeoutId = setTimeout(() => {
+                        alunoCard.classList.remove('flex');
+                        alunoCard.classList.add('hidden');
+                        ultimoCodigoLido = ""; 
+                    }, 2500);
+                }
+            }
+            requestAnimationFrame(tick);
+        }
+
+        function salvarPedaco(e) {
+            if (e.data.size > 0) {
+                const blob = new Blob([e.data], { type: mimeTypeSelecionado });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Frequencia_${new Date().getHours()}h${new Date().getMinutes()}m.${extensaoVideo}`;
+                a.click(); 
+                URL.revokeObjectURL(url);
+            }
+        }
+
+        function encerrarGravacao() {
+            isAtivo = false;
+
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                mediaRecorder.stream.getTracks().forEach(t => t.stop()); 
+            }
+
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(t => t.stop());
+            }
+
+            btnParar.innerHTML = "✔️ Gravação Finalizada";
+            btnParar.classList.replace('bg-red-600', 'bg-gray-600');
+            btnParar.classList.replace('hover:bg-red-700', 'hover:bg-gray-700');
+            btnParar.classList.remove('animate-pulse');
+            btnParar.classList.remove('shadow-[0_0_15px_rgba(220,38,38,0.8)]');
+            btnParar.disabled = true;
+            
+            // Desativa o NoSleep, permitindo que a tela volte a descansar/desligar
+            noSleep.disable();
+            
+            clearTimeout(timerFim);
+            clearTimeout(timeoutId);
+
+            alunoFoto.classList.add('hidden');
+            alunoDataHora.classList.add('hidden');
+            alunoInfo.innerText = "Período de registro de frequência esgotado.";
+            alunoInfo.className = "text-3xl md:text-5xl font-bold text-white text-center max-w-4xl drop-shadow-2xl bg-red-700/90 p-10 rounded-3xl border-4 border-red-900";
+            alunoCard.classList.remove('hidden');
+            alunoCard.classList.add('flex');
+        }
+
+        btnParar.onclick = encerrarGravacao;
+    </script>
+</body>
+</html>
