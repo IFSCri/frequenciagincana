@@ -6,8 +6,6 @@
     <title>Leitor QR e Frequência</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <!-- Biblioteca NoSleep.js para manter a tela ligada -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/nosleep/0.12.0/NoSleep.min.js"></script>
 </head>
 <body class="m-0 overflow-hidden bg-black font-sans">
     
@@ -30,15 +28,6 @@
             <button id="btnIniciar" disabled class="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-4 px-4 rounded-lg transition mt-4 text-lg shadow-lg">
                 ▶ Iniciar Gravação e Frequência
             </button>
-        </div>
-    </div>
-
-    <!-- Modal de Alerta Customizado (Substituindo o alert nativo) -->
-    <div id="customAlert" class="hidden fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
-        <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full text-center">
-            <h3 class="text-2xl font-bold text-red-600 mb-4">Atenção</h3>
-            <p id="customAlertMsg" class="text-gray-700 mb-6 font-medium text-lg"></p>
-            <button onclick="document.getElementById('customAlert').classList.add('hidden')" class="bg-gray-800 hover:bg-gray-900 text-white px-8 py-3 rounded-lg font-bold transition">Entendi</button>
         </div>
     </div>
 
@@ -80,8 +69,6 @@
         const alunoFoto = document.getElementById('alunoFoto');
         const alunoInfo = document.getElementById('alunoInfo');
         const alunoDataHora = document.getElementById('alunoDataHora');
-        const customAlert = document.getElementById('customAlert');
-        const customAlertMsg = document.getElementById('customAlertMsg');
 
         const paletaCursos = ["text-blue-400", "text-purple-400", "text-pink-400", "text-yellow-400", "text-teal-400", "text-orange-400"];
         let mapaCursos = {};
@@ -97,9 +84,6 @@
         let mimeTypeSelecionado = "video/webm";
         let extensaoVideo = "webm";
 
-        // Inicializa o NoSleep
-        const noSleep = new NoSleep();
-
         pastaFotos.addEventListener('change', (e) => {
             arquivosAlunos = Array.from(e.target.files);
             statusPasta.innerText = `${arquivosAlunos.length} arquivos carregados e prontos.`;
@@ -107,19 +91,10 @@
             btnIniciar.disabled = false;
         });
 
-        function mostrarAlerta(mensagem) {
-            customAlertMsg.innerText = mensagem;
-            customAlert.classList.remove('hidden');
-        }
-
         btnIniciar.onclick = async () => {
             const minutos = parseInt(tempoInput.value) || 60; 
             
-            // Ativa o NoSleep após a interação do usuário (clique no botão)
-            noSleep.enable();
-            
             try {
-                // Tenta capturar a tela (Pode falhar em dispositivos Android muito antigos como 4.4)
                 const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
                 
                 const tiposSuportados = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'];
@@ -143,7 +118,6 @@
 
                 isAtivo = true;
 
-                // Inicia a câmera traseira
                 const camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
                 video.srcObject = camStream;
                 requestAnimationFrame(tick);
@@ -151,10 +125,8 @@
                 timerFim = setTimeout(encerrarGravacao, minutos * 60000);
 
             } catch (err) {
-                mostrarAlerta("Atenção: É obrigatório permitir a gravação da tela para iniciar a gincana ou seu dispositivo não suporta esta função.");
+                alert("Atenção: É obrigatório permitir a gravação da tela para iniciar a gincana.");
                 console.error("Erro na gravação de tela:", err);
-                // Se falhar e precisar rodar num Android 4.4 sem gravar tela, comente o try-catch 
-                // e mantenha apenas a captura de getUserMedia(câmera) e o setup da UI.
             }
         };
 
@@ -222,11 +194,11 @@
                                 alunosRegistrados.add(searchCode);
                                 
                                 // === ENVIO PARA O GAS AQUI ===
-                                const GAS_URL = "https://script.google.com/macros/s/AKfycbyjBae75VDf7-wRWVLSiGN14Wd-yHjXs5RTraJ45DOz04xpBO3NDsVp2ijW-ueArbQ4QA/exec"; 
+                                const GAS_URL = "https://script.google.com/macros/s/AKfycbyjBae75VDf7-wRWVLSiGN14Wd-yHjXs5RTraJ45DOz04xpBO3NDsVp2ijW-ueArbQ4QA/exec"; // <-- COLE SUA URL GERADA PELO APPS SCRIPT AQUI
                                 
                                 if(GAS_URL !== "SUA_URL_DO_WEB_APP_AQUI") {
                                     const params = new URLSearchParams({ nome: nomeCompleto, curso: curso, matricula: matricula, qrCode: searchCode });
-                                    fetch(`${GAS_URL}?${params.toString()}`, { mode: 'no-cors' }); 
+                                    fetch(`${GAS_URL}?${params.toString()}`, { mode: 'no-cors' }); // no-cors evita erros de bloqueio ao enviar
                                 }
 
                                 alunoInfo.innerText = nomeCurto;
@@ -292,9 +264,6 @@
             btnParar.classList.remove('animate-pulse');
             btnParar.classList.remove('shadow-[0_0_15px_rgba(220,38,38,0.8)]');
             btnParar.disabled = true;
-            
-            // Desativa o NoSleep, permitindo que a tela volte a descansar/desligar
-            noSleep.disable();
             
             clearTimeout(timerFim);
             clearTimeout(timeoutId);
