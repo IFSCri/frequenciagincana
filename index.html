@@ -28,6 +28,10 @@
             <button id="btnIniciar" disabled class="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold py-4 px-4 rounded-lg transition mt-4 text-lg shadow-lg">
                 ▶ Iniciar Gravação e Frequência
             </button>
+
+            <button id="btnTelaCheia" class="bg-gray-800 hover:bg-gray-900 text-white font-bold py-3 px-4 rounded-lg transition mt-1 text-lg shadow-lg border-2 border-gray-700">
+                🔲 Colocar em Tela Cheia
+            </button>
         </div>
     </div>
 
@@ -73,6 +77,7 @@
         const alunoFoto = document.getElementById('alunoFoto');
         const alunoInfo = document.getElementById('alunoInfo');
         const alunoDataHora = document.getElementById('alunoDataHora');
+        const btnTelaCheia = document.getElementById('btnTelaCheia');
 
         const paletaCursos = ["text-blue-400", "text-purple-400", "text-pink-400", "text-yellow-400", "text-teal-400", "text-orange-400"];
         let mapaCursos = {};
@@ -88,6 +93,18 @@
         let mimeTypeSelecionado = "video/webm";
         let extensaoVideo = "webm";
         let wakeLock = null; 
+
+        btnTelaCheia.onclick = () => {
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen();
+            } else if (elem.webkitRequestFullscreen) { /* Safari / Versões antigas */
+                elem.webkitRequestFullscreen();
+            } else if (elem.msRequestFullscreen) { /* IE11 */
+                elem.msRequestFullscreen();
+            }
+            btnTelaCheia.classList.add('hidden');
+        };
 
         pastaFotos.addEventListener('change', (e) => {
             arquivosAlunos = Array.from(e.target.files);
